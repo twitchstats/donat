@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Таймер донатофона</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Montserrat:wght@400;600;800&family=Oswald:wght@400;600&family=Bebas+Neue&family=Rubik:wght@400;600;800&family=JetBrains+Mono:wght@400;700&family=Russo+One&display=swap&subset=cyrillic" rel="stylesheet">
+<style>
+  :root{
+    --bg:#15171c; --panel:#1c1f26; --line:#2a2e38; --text:#e8eaf0; --muted:#8a90a0; --accent:#6ea8ff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:'Rubik',system-ui,sans-serif;background:var(--bg);color:var(--text)}
+
+  /* ===== сам виджет ===== */
+  .widget{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.25em;text-align:center;padding:12px}
+  .time.grad .d,.time.grad .c{background-image:linear-gradient(180deg,var(--g1),var(--g2));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+  .time.shine .d,.time.shine .c{background-image:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.75) 50%,transparent 60%),linear-gradient(180deg,var(--g1),var(--g2));background-size:260% 100%,100% 100%;background-repeat:no-repeat;background-position:160% 0,0 0;animation:shine 9s ease-in-out infinite}
+  @keyframes shine{0%{background-position:160% 0,0 0}14%{background-position:-60% 0,0 0}100%{background-position:-60% 0,0 0}}
+  .label.grad{background-image:linear-gradient(180deg,var(--g1),var(--g2));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+  .label.shine{background-image:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.75) 50%,transparent 60%),linear-gradient(180deg,var(--g1),var(--g2));background-size:260% 100%,100% 100%;background-repeat:no-repeat;background-position:160% 0,0 0;animation:shine 9s ease-in-out infinite;animation-delay:.3s}
+  .pop{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);opacity:0;pointer-events:none;white-space:nowrap;line-height:1}
+  @media (prefers-reduced-motion:reduce){.time.shine .d,.time.shine .c,.label.shine{animation:none}}
+  .label{line-height:1.1;white-space:pre-wrap}
+  .time{display:flex;align-items:center;justify-content:center;line-height:1;font-kerning:none}
+  .time .d{display:inline-block;width:var(--dw,.7em);text-align:center}
+  .time .c{display:inline-block;width:var(--cw,.35em);text-align:center;transform:translateY(var(--cy,0em))}
+
+  /* ===== режим OBS ===== */
+  body.obs{background:transparent;overflow:hidden}
+  body.obs .app{display:block;height:100%}
+  body.obs .side,body.obs .stagebar{display:none}
+  body.obs .stage{background:none!important;height:100%;padding:0}
+  .hoverctl{display:none}
+  body.obs .hoverctl{display:flex;position:fixed;left:50%;bottom:8px;transform:translateX(-50%);gap:6px;padding:6px;border-radius:10px;background:#000c;opacity:0;transition:opacity .15s}
+  body.obs:hover .hoverctl{opacity:1}
+  .hoverctl button{font:600 13px Rubik,sans-serif;color:#fff;background:#333;border:0;border-radius:7px;padding:6px 10px;cursor:pointer}
+
+  /* ===== конфигуратор ===== */
+  .app{display:grid;grid-template-columns:360px 1fr;height:100%}
+  .side{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:20px 20px 40px}
+  .side h1{font-size:18px;margin:0 0 4px;font-weight:600}
+  .side p.hint{margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.4}
+  .grp{margin:0 0 18px;padding:0 0 18px;border-bottom:1px solid var(--line)}
+  .grp:last-child{border:0}
+  .grp h2{font-size:13px;font-weight:600;margin:0 0 10px;color:var(--muted)}
+  .row{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+  .row>label{flex:0 0 112px;font-size:13px;color:var(--muted)}
+  .row>.ctl{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+  input[type=text],input[type=number],select,textarea{width:100%;background:#12141a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:14px}
+  textarea{resize:vertical;min-height:38px}
+  input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=color]{width:42px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;flex:none}
+  .val{flex:none;min-width:42px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .sw{display:flex;gap:6px;flex-wrap:wrap}
+  .sw button{width:22px;height:22px;border-radius:50%;border:2px solid #0000;cursor:pointer;padding:0}
+  .sw button:hover{border-color:#fff8}
+  .btns{display:flex;flex-wrap:wrap;gap:6px}
+  .btn{background:#262a34;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:500 13px Rubik,sans-serif;cursor:pointer}
+  .btn:hover{background:#2f3441}
+  .btn.main{background:var(--accent);color:#0c1220;border-color:var(--accent);font-weight:600}
+  .btn.main:hover{filter:brightness(1.08)}
+  .rate{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 10px;font-size:14px}
+  .rate input{width:84px}
+  .rate select{width:auto}
+  .gr{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+  .gr button{width:40px;height:24px;border-radius:7px;border:2px solid #0000;cursor:pointer;padding:0}
+  .gr button:hover{border-color:#fff8}
+  .linkbox{display:flex;gap:6px}
+  .linkbox input{font-size:12px}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+  .toggle input{accent-color:var(--accent);width:16px;height:16px}
+
+  .stage{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    background-color:#0e1014;
+    background-image:linear-gradient(45deg,#14171d 25%,transparent 25%,transparent 75%,#14171d 75%),linear-gradient(45deg,#14171d 25%,transparent 25%,transparent 75%,#14171d 75%);
+    background-size:24px 24px;background-position:0 0,12px 12px}
+  .stagebar{position:absolute;top:12px;right:12px;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+  .stagebar button{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
+  .stagebar button.on{border-color:#fff}
+  @media (max-width:820px){.app{grid-template-columns:1fr;grid-template-rows:auto 280px}.side{order:2;border:0}.stage{order:1}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="side">
+    <h1>Таймер донатофона</h1>
+    <p class="hint">Обратный отсчёт: время идёт вниз до 00:00, донаты добавляют время. Настрой, скопируй ссылку и вставь в OBS как «Источник браузера».</p>
+
+    <div class="grp">
+      <h2>Текст</h2>
+      <div class="row"><label for="t">Надпись</label><div class="ctl"><textarea id="t" rows="1"></textarea></div></div>
+      <div class="row"><label for="ls">Размер надписи</label><div class="ctl"><input type="range" id="ls" min="14" max="120"><span class="val" id="ls_v"></span></div></div>
+      <div class="row"><label for="tc">Цвет надписи</label><div class="ctl"><input type="color" id="tc"><div class="sw" data-for="tc"></div></div></div>
+      <div class="row"><label></label><div class="ctl"><label class="toggle"><input type="checkbox" id="lgrad"> Градиент на надписи</label></div></div>
+      <div class="row"><label for="tc2">Низ градиента</label><div class="ctl"><input type="color" id="tc2"><div class="sw" data-for="tc2"></div></div></div>
+    </div>
+
+    <div class="grp">
+      <h2>Таймер</h2>
+      <div class="row"><label for="s">Размер цифр</label><div class="ctl"><input type="range" id="s" min="40" max="320"><span class="val" id="s_v"></span></div></div>
+      <div class="row"><label for="c">Цвет цифр</label><div class="ctl"><input type="color" id="c"><div class="sw" data-for="c"></div></div></div>
+      <div class="row"><label for="f">Шрифт</label><div class="ctl"><select id="f">
+        <option>Unbounded</option><option>Montserrat</option><option>Oswald</option><option>Bebas Neue</option>
+        <option>Rubik</option><option>JetBrains Mono</option><option>Russo One</option></select></div></div>
+      <div class="row"><label for="wt">Толщина</label><div class="ctl"><select id="wt"><option value="400">Обычная</option><option value="600">Полужирная</option><option value="800">Жирная</option></select></div></div>
+      <div class="row"><label for="sp">Между цифрами</label><div class="ctl"><input type="range" id="sp" min="0" max="40"><span class="val" id="sp_v"></span></div></div>
+      <div class="row"><label for="gap">До надписи</label><div class="ctl"><input type="range" id="gap" min="0" max="60"><span class="val" id="gap_v"></span></div></div>
+      <div class="row"><label></label><div class="ctl"><label class="toggle"><input type="checkbox" id="sh"> Мягкая тень (для читаемости)</label></div></div>
+    </div>
+
+    <div class="grp">
+      <h2>Эффекты</h2>
+      <div class="gr" id="grads"></div>
+      <div class="row"><label></label><div class="ctl"><label class="toggle"><input type="checkbox" id="grad"> Градиент на цифрах</label></div></div>
+      <div class="row"><label for="c2">Низ градиента</label><div class="ctl"><input type="color" id="c2"><div class="sw" data-for="c2"></div></div></div>
+      <div class="row"><label for="vol">Объём цифр</label><div class="ctl"><input type="range" id="vol" min="0" max="8"><span class="val" id="vol_v"></span></div></div>
+      <div class="row"><label></label><div class="ctl"><label class="toggle"><input type="checkbox" id="roll"> Плавная смена цифр</label></div></div>
+      <div class="row"><label></label><div class="ctl"><label class="toggle"><input type="checkbox" id="shine"> Редкий блик по цифрам</label></div></div>
+      <div class="row"><label></label><div class="ctl"><label class="toggle"><input type="checkbox" id="pop_on"> Всплывашка «+время» при донате</label></div></div>
+    </div>
+
+    <div class="grp">
+      <h2>Формат времени</h2>
+      <div class="row"><label for="h">Часы</label><div class="ctl"><select id="h"><option value="auto">Показывать, если нужны</option><option value="always">Всегда</option><option value="never">Никогда (только минуты)</option></select></div></div>
+    </div>
+
+    <div class="grp">
+      <h2>Донаты (DonationAlerts)</h2>
+      <div class="row"><label for="tk">Токен</label><div class="ctl"><input type="password" id="tk" autocomplete="off" placeholder="Вшит в файл, менять не нужно"></div></div>
+      <div class="rate">
+        <span>За</span><input type="number" id="rub" min="1" step="1" aria-label="Сколько рублей"><span>₽ добавлять</span>
+        <input type="number" id="tv" min="0" step="1" aria-label="Сколько времени"><select id="tu" aria-label="Единица времени"><option value="1">секунд</option><option value="60">минут</option><option value="3600">часов</option></select>
+      </div>
+      <div class="btns presets" style="margin:0 0 10px">
+        <button class="btn" type="button" data-rate="1,1,60">1 ₽ = 1 мин</button>
+        <button class="btn" type="button" data-rate="10,1,60">10 ₽ = 1 мин</button>
+        <button class="btn" type="button" data-rate="100,1,60">100 ₽ = 1 мин</button>
+        <button class="btn" type="button" data-rate="1,10,1">1 ₽ = 10 сек</button>
+      </div>
+      <p class="hint" id="dahint" style="margin:0 0 6px"></p>
+      <p class="hint" id="dastat" style="margin:0 0 10px"></p>
+      <div class="row" style="margin-bottom:10px"><label for="tdon">Тест, ₽</label><div class="ctl"><input type="number" id="tdon" min="1" placeholder="100"><button class="btn" id="tdon_b">Проверить</button></div></div>
+      <div id="dalog" class="hint" style="margin:0"></div>
+    </div>
+
+    <div class="grp">
+      <h2>Управление</h2>
+      <div class="btns" style="margin-bottom:10px">
+        <button class="btn main" data-act="toggle" id="b_toggle">Старт</button>
+        <button class="btn" data-act="reset">Сбросить</button>
+      </div>
+      <div class="btns" style="margin-bottom:10px">
+        <button class="btn" data-add="-300">−5 мин</button>
+        <button class="btn" data-add="-60">−1 мин</button>
+        <button class="btn" data-add="60">+1 мин</button>
+        <button class="btn" data-add="300">+5 мин</button>
+        <button class="btn" data-add="600">+10 мин</button>
+      </div>
+      <div class="rate" style="margin:0 0 10px">
+        <span>Время:</span>
+        <input type="number" id="set_h" min="0" placeholder="0" style="width:60px" aria-label="Часы"><span>ч</span>
+        <input type="number" id="set_m" min="0" placeholder="0" style="width:60px" aria-label="Минуты"><span>мин</span>
+        <input type="number" id="set_s" min="0" placeholder="0" style="width:60px" aria-label="Секунды"><span>сек</span>
+        <button class="btn main" type="button" id="setbtn">Установить и запустить</button>
+      </div>
+      <div class="row"><label for="sbu">Адрес облака</label><div class="ctl"><input type="text" id="sbu" autocomplete="off" placeholder="https://xxxx.supabase.co"></div></div>
+      <div class="row"><label for="sbk">Ключ облака</label><div class="ctl"><input type="password" id="sbk" autocomplete="off" placeholder="Supabase anon public key"></div></div>
+      <p class="hint" id="cloudstat" style="margin:10px 0 0"></p>
+      <p class="hint" style="margin:10px 0 0">Горячие клавиши: пробел — старт/пауза, + / − — минута.</p>
+    </div>
+
+    <div class="grp">
+      <h2>Ссылка для OBS</h2>
+      <div class="linkbox"><input type="text" id="link" readonly><button class="btn main" id="copy">Копировать</button></div>
+      <p class="hint" style="margin:10px 0 0">В OBS: источник «Браузер» → вставь ссылку, фон прозрачный. Чтобы управлять таймером, ПКМ по источнику → «Интерактивно» и жми кнопки внизу.</p>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="stagebar">Фон предпросмотра:
+      <button data-bg="" class="on" style="background:#0e1014" title="Тёмный"></button>
+      <button data-bg="#ffffff" style="background:#fff" title="Белый"></button>
+      <button data-bg="#2d6a4f" style="background:#2d6a4f" title="Зелёный"></button>
+      <button data-bg="#5b3a8c" style="background:#5b3a8c" title="Фиолетовый"></button>
+    </div>
+    <div class="widget" id="widget">
+      <div class="label" id="label"></div>
+      <div class="time" id="time"></div>
+      <div class="pop" id="pop"></div>
+      <div id="obsnote" style="display:none;position:absolute;left:4px;right:4px;bottom:2px;font:11px/1.25 Rubik,sans-serif;color:#ff8a8a;text-align:center;text-shadow:0 0 3px #000,0 0 3px #000"></div>
+    </div>
+  </main>
+</div>
+
+<div class="hoverctl">
+  <button data-act="toggle" id="h_toggle">Старт</button>
+  <button data-act="reset">Сброс</button>
+  <button data-add="-60">−1</button>
+  <button data-add="60">+1</button>
+  <button data-add="300">+5</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.5.0/socket.io.js"></script>
+<script>
+(function(){
+  var D = {
+    t:'ДОНАТОФОН', ls:36, tc:'#ffffff', tc2:'#9fb6d4', lgrad:'1',
+    s:160, c:'#fff1c2', c2:'#ffb02e', grad:'1', vol:3, roll:'1', shine:'0', pop_on:'1', f:'Unbounded', wt:'600', gap:10, sp:10,
+    sh:'0',
+    h:'auto',
+    tk:'sbHPmKg8yVcy5yVxFB8F1RLCHfkXUBdOdoXJvJ4J', rub:100, tv:10, tu:'60',
+    sbu:'https://tqfjzobjamjhfealhyrv.supabase.co', sbk:'sb_publishable_JZL_BYxmOekpIOPvizcRCg_XjaNfYtY'
+  };
+  var KEYS = Object.keys(D);
+  var P = new URLSearchParams(location.search);
+  var OBS = P.get('w') === '1';
+  var cfg = {};
+  KEYS.forEach(function(k){ cfg[k] = P.has(k) ? P.get(k) : D[k]; });
+  ['ls','s','gap','sp','vol','rub','tv'].forEach(function(k){ cfg[k] = Number(cfg[k]); if(isNaN(cfg[k])) cfg[k] = D[k]; });
+
+  /* ключ облака: из ссылки, иначе из памяти браузера */
+  try {
+    if (P.has('sbk')) localStorage.setItem('donatofon_sbk', cfg.sbk);
+    else cfg.sbk = localStorage.getItem('donatofon_sbk') || D.sbk;
+    if (P.has('sbu')) localStorage.setItem('donatofon_sbu', cfg.sbu);
+    else cfg.sbu = localStorage.getItem('donatofon_sbu') || D.sbu;
+  } catch(e){}
+
+  var $ = function(id){ return document.getElementById(id); };
+  var SKEY = 'donatofon_timer_state_v2';
+  var PRESETS = ['#ffffff','#ffd24a','#ff8a4c','#ff5d73','#c58bff','#6ea8ff','#4fd1c5','#7be07b'];
+
+  if (OBS) document.body.classList.add('obs');
+
+  /* ---------- состояние таймера ---------- */
+  var state;
+  function load(){
+    try { var s = JSON.parse(localStorage.getItem(SKEY)); if (s && typeof s.base === 'number') return s; } catch(e){}
+    return null;
+  }
+  /* копия времени всегда лежит и локально: с облаком или без него */
+  function save(){ try { localStorage.setItem(SKEY, JSON.stringify({ base: state.base, running: !!state.running, since: state.since - offset })); } catch(e){} }
+  function initState(){
+    var s0 = load();
+    if (s0) state = { base: s0.base, running: !!s0.running, since: Number(s0.since) || 0 };
+    else { state = { base: 0, running:false, since:0 }; save(); }
+    synced = !cloud; /* с облаком ждём реальное время, а не старую локальную копию */
+  }
+
+  /* ---------- облако (Supabase): общее время для сайта и OBS ---------- */
+  var CLOUD_URL = '', CLOUD_KEY = '', cloud = false;
+  var offset = 0, synced = true, busy = 0, poll = null, cc = null;
+  function setCloudVars(){
+    CLOUD_URL = String(cfg.sbu || '').trim().replace(/\/+$/, '');
+    CLOUD_KEY = String(cfg.sbk || '').trim();
+    cloud = !!(CLOUD_URL && CLOUD_KEY);
+  }
+  setCloudVars();
+  function now(){ return Date.now() + offset; }
+  function cloudStatus(ok, err){
+    var el = $('cloudstat'); if (!el) return;
+    if (!cloud) { el.textContent = 'Облако не настроено: вставь ключ Supabase в поле выше, иначе сайт и OBS считают время каждый сам по себе.'; el.style.color = ''; return; }
+    if (ok === undefined) { el.textContent = 'Подключаюсь к облаку…'; el.style.color = ''; return; }
+    if (lastWriteErr) { el.textContent = 'Облако НЕ приняло команду (' + lastWriteErr + '). Запусти donatofon-setup.sql в Supabase заново и проверь ключ.'; el.style.color = '#ff9a9a'; return; }
+    if (!ok && /Failed to fetch|NetworkError|Load failed/i.test(err)) err = 'не достучался до ' + CLOUD_URL + ' — проверь «Адрес облака» (Supabase → Project Settings → API → Project URL) и не на паузе ли проект';
+    el.textContent = ok ? 'Облако подключено: время общее для сайта и OBS и идёт, даже если OBS закрыт. Копия хранится и локально.' : 'Облако не отвечает (' + err + '). Пока работаю локально.';
+    el.style.color = ok ? '#7be07b' : '#ff9a9a';
+  }
+  var notes = {};
+  function obsNote(k, t){
+    if (!OBS) return;
+    notes[k] = t || '';
+    var all = Object.keys(notes).map(function(x){ return notes[x]; }).filter(Boolean).join(' | ');
+    var el = $('obsnote'); el.textContent = all; el.style.display = all ? '' : 'none';
+  }
+  var T0 = Date.now(), opSeq = 0, lastWriteErr = '';
+  function rpc(name, args){
+    var t0 = Date.now(), seq = opSeq, isGet = name === 'donatofon_get';
+    var h = { 'apikey': CLOUD_KEY, 'Content-Type': 'application/json' };
+    if (/^eyJ/.test(CLOUD_KEY)) h['Authorization'] = 'Bearer ' + CLOUD_KEY; /* новые ключи sb_publishable_ — не JWT, Bearer им нельзя */
+    return fetch(CLOUD_URL + '/rest/v1/rpc/' + name, {
+      method: 'POST', headers: h, body: JSON.stringify(args || {})
+    }).then(function(r){
+      if (!r.ok) return r.text().then(function(t){
+        var m = ''; try { m = JSON.parse(t).message || ''; } catch(e){}
+        throw new Error('HTTP ' + r.status + (m ? ': ' + m : ''));
+      });
+      return r.json();
+    }).then(function(j){
+      if (isGet && (busy || seq !== opSeq)) return j; /* опрос устарел: после него была команда */
+      if (!isGet) lastWriteErr = '';
+      offset = Number(j.now_ms) - (t0 + Date.now()) / 2;
+      state = { base: Number(j.base_ms), running: !!j.running, since: Number(j.since_ms) };
+      synced = true; save(); cloudStatus(true); obsNote('cloud', (P.get('dbg') === '1' || Date.now() - T0 < 8000) ? 'v5 · облако ок' : ''); render();
+      return j;
+    }).catch(function(e){
+      var msg = String(e && e.message || e);
+      if (!isGet) lastWriteErr = msg;
+      cloudStatus(false, msg); obsNote('cloud', 'Облако: ' + msg);
+    });
+  }
+  function cloudOp(name, args){ busy++; opSeq++; return rpc(name, args).then(function(r){ busy--; return r; }); }
+
+  function current(){
+    var v = state.base;
+    if (state.running) v -= now() - state.since; /* обратный отсчёт */
+    return Math.max(0, v);
+  }
+  function commit(){ state.base = current(); state.since = now(); }
+  function toggle(){
+    commit();
+    state.running = !state.running; state.since = now(); save(); render();
+    if (cloud) cloudOp('donatofon_toggle');
+  }
+  function reset(){
+    state = { base: 0, running:false, since:0 }; save(); render();
+    if (cloud) cloudOp('donatofon_reset');
+  }
+  function setTime(sec){
+    sec = Math.max(0, Math.round(sec));
+    state.base = sec * 1000; state.since = now(); state.running = sec > 0; save(); render();
+    if (cloud) cloudOp('donatofon_set', { p_ms: sec * 1000, p_run: sec > 0 });
+  }
+  function addLocal(sec){
+    showPop(sec);
+    commit();
+    state.base = Math.max(0, state.base + sec * 1000);
+    save(); render();
+  }
+  function add(sec){
+    addLocal(sec);
+    if (cloud) cloudOp('donatofon_add', { p_delta_ms: Math.round(sec * 1000) });
+  }
+
+  /* ---------- отрисовка ---------- */
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function format(ms){
+    var total = Math.floor(ms / 1000);
+    var h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    if (cfg.h === 'never') { return pad(Math.floor(total / 60)) + ':' + pad(s); }
+    if (cfg.h === 'always' || h > 0) return pad(h) + ':' + pad(m) + ':' + pad(s);
+    return pad(m) + ':' + pad(s);
+  }
+  function unit(k){ return (k === 'ls' || k === 's' || k === 'gap') ? ' px' : (k === 'sp' ? ' %' : ''); }
+  /* реальные размеры цифр выбранного шрифта: ячейки не слипаются, двоеточие по центру */
+  function measure(){
+    var ctx = measure.c || (measure.c = document.createElement('canvas').getContext('2d'));
+    ctx.font = cfg.wt + ' 200px "' + cfg.f + '", sans-serif';
+    var maxW = 0, i, m;
+    for (i = 0; i < 10; i++){ m = ctx.measureText(String(i)); if (m.width > maxW) maxW = m.width; }
+    var z = ctx.measureText('0'), c = ctx.measureText(':');
+    var pad = cfg.sp / 100;
+    var el = $('time').style;
+    el.setProperty('--dw', (maxW / 200 + pad) + 'em');
+    el.setProperty('--cw', (c.width / 200 + pad * 0.6) + 'em');
+    var zc = (z.actualBoundingBoxAscent - z.actualBoundingBoxDescent) / 2;
+    var cc = (c.actualBoundingBoxAscent - c.actualBoundingBoxDescent) / 2;
+    el.setProperty('--cy', ((cc - zc) / 200) + 'em');
+  }
+  var lastStr = '';
+  function buildTime(str){
+    var box = $('time'); box.innerHTML = '';
+    for (var i = 0; i < str.length; i++){
+      var sp = document.createElement('span');
+      sp.className = str[i] === ':' ? 'c' : 'd';
+      sp.textContent = str[i];
+      sp.style.animationDelay = (i * 0.08) + 's';
+      box.appendChild(sp);
+    }
+  }
+  function render(){
+    $('widget').style.visibility = synced ? '' : 'hidden';
+    var v = current();
+    var str = format(v);
+    if (str.length !== lastStr.length){ buildTime(str); lastStr = str; }
+    var spans = $('time').children;
+    for (var i = 0; i < str.length; i++) if (spans[i].textContent !== str[i]) {
+      spans[i].textContent = str[i];
+      if (cfg.roll === '1' && spans[i].animate && state.running) spans[i].animate([{ transform: 'translateY(-14%)', opacity: .45 }, { transform: 'none', opacity: 1 }], { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    }
+    var label = state.running ? 'Пауза' : 'Старт';
+    $('b_toggle').textContent = label; $('h_toggle').textContent = label;
+  }
+
+  function shade(hex, f){
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return '#000';
+    var n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return 'rgb(' + Math.round(r * f) + ',' + Math.round(g * f) + ',' + Math.round(b * f) + ')';
+  }
+  function showPop(sec){
+    if (cfg.pop_on !== '1' || !sec) return;
+    var el = $('pop'), t = $('time');
+    el.textContent = (sec > 0 ? '+' : '−') + human(Math.abs(sec));
+    if (el.animate) {
+      el.animate([
+        { opacity: 0, transform: 'translate(-50%, -40%) scale(.9)' },
+        { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: .14 },
+        { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: .72 },
+        { opacity: 0, transform: 'translate(-50%, 30%) scale(1)' }
+      ], { duration: 2400, easing: 'ease-out' });
+      t.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.045)', offset: .3 }, { transform: 'scale(1)' }], { duration: 520, easing: 'ease-out' });
+    }
+  }
+  function applyStyle(){
+    var w = $('widget');
+    $('label').textContent = cfg.t;
+    $('label').style.display = cfg.t.trim() ? '' : 'none';
+    $('label').style.fontSize = cfg.ls + 'px';
+    $('label').style.color = cfg.tc;
+    $('label').style.fontFamily = "'" + cfg.f + "', sans-serif";
+    $('label').style.fontWeight = cfg.wt;
+    $('time').style.fontSize = cfg.s + 'px';
+    var box = $('time');
+    var g1 = cfg.c, g2 = cfg.grad === '1' ? cfg.c2 : cfg.c;
+    box.style.setProperty('--g1', g1); box.style.setProperty('--g2', g2);
+    box.style.color = cfg.c;
+    box.classList.toggle('grad', cfg.grad === '1' || cfg.shine === '1');
+    box.classList.toggle('shine', cfg.shine === '1');
+    $('time').style.fontFamily = "'" + cfg.f + "', sans-serif";
+    $('time').style.fontWeight = cfg.wt;
+    w.style.gap = cfg.gap + 'px';
+    var shadow = cfg.sh === '1' ? '0 2px 10px rgba(0,0,0,.55)' : 'none';
+    box.style.textShadow = 'none';
+    var lab = $('label'), l2 = cfg.lgrad === '1' ? cfg.tc2 : cfg.tc;
+    lab.style.setProperty('--g1', cfg.tc); lab.style.setProperty('--g2', l2);
+    lab.classList.toggle('grad', cfg.lgrad === '1' || cfg.shine === '1');
+    lab.classList.toggle('shine', cfg.shine === '1');
+    lab.style.textShadow = 'none';
+    var lf = [], lstep = Math.max(1, Math.round(cfg.ls / 70)), ldark = shade(l2, .42);
+    for (var q = 0; q < cfg.vol; q++) lf.push('drop-shadow(0 ' + lstep + 'px 0 ' + ldark + ')');
+    if (cfg.sh === '1') lf.push('drop-shadow(0 ' + Math.max(2, Math.round(cfg.ls / 14)) + 'px ' + Math.max(4, Math.round(cfg.ls / 8)) + 'px rgba(0,0,0,.45))');
+    lab.style.filter = lf.length ? lf.join(' ') : 'none';
+    var f = [], step = Math.max(1, Math.round(cfg.s / 110)), dark = shade(g2, .42);
+    for (var k = 0; k < cfg.vol; k++) f.push('drop-shadow(0 ' + step + 'px 0 ' + dark + ')');
+    if (cfg.sh === '1') f.push('drop-shadow(0 ' + Math.round(cfg.s / 16) + 'px ' + Math.round(cfg.s / 12) + 'px rgba(0,0,0,.45))');
+    box.style.filter = f.length ? f.join(' ') : 'none';
+    var popEl = $('pop');
+    popEl.style.fontSize = Math.round(cfg.s * 0.26) + 'px';
+    popEl.style.fontFamily = "'" + cfg.f + "', sans-serif";
+    popEl.style.fontWeight = cfg.wt;
+    popEl.style.color = g2;
+    w.style.paddingBottom = (cfg.pop_on === '1' ? Math.round(cfg.s * 0.36) + 12 : 12) + 'px';
+    measure(); lastStr = ''; render();
+  }
+
+  /* ---------- конфигуратор ---------- */
+  function linkFromCfg(){
+    var q = new URLSearchParams();
+    q.set('w','1');
+    KEYS.forEach(function(k){ if ((k === 'tk' || k === 'sbu') && cfg[k] === D[k]) return;
+      if (k === 'sbk' && !cfg[k]) return; q.set(k, cfg[k]); });
+    return location.origin + location.pathname + '?' + q.toString();
+  }
+  function refreshLink(){
+    if (location.protocol === 'file:') { $('link').value = 'file:///' + location.pathname.replace(/^\//,'') + '?' + linkFromCfg().split('?')[1]; }
+    else $('link').value = linkFromCfg();
+  }
+  function bind(){
+    KEYS.forEach(function(k){
+      var el = $(k); if (!el) return;
+      if (el.type === 'checkbox') el.checked = cfg[k] === '1';
+      else el.value = cfg[k];
+      var show = $(k + '_v'); if (show) show.textContent = cfg[k] + unit(k);
+      var ev = (el.tagName === 'SELECT' || el.type === 'checkbox') ? 'change' : 'input';
+      el.addEventListener(ev, function(){
+        var val = el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
+        if (['ls','s','gap','sp','vol','rub','tv'].indexOf(k) >= 0) { val = Number(val); if (isNaN(val)) val = 0; }
+        cfg[k] = val;
+        if (show) show.textContent = val + unit(k);
+        applyStyle(); refreshLink(); updateHint(); if (k === 'tk') { clearTimeout(ct); ct = setTimeout(connectDA, 700); }
+        if (k === 'sbk' || k === 'sbu') { try { localStorage.setItem('donatofon_sbk', cfg.sbk); localStorage.setItem('donatofon_sbu', cfg.sbu); } catch(e){} clearTimeout(cc); cc = setTimeout(startCloud, 600); }
+      });
+    });
+    document.querySelectorAll('.sw').forEach(function(box){
+      var target = box.getAttribute('data-for');
+      PRESETS.forEach(function(col){
+        var b = document.createElement('button'); b.style.background = col; b.title = col; b.type = 'button';
+        b.addEventListener('click', function(){ $(target).value = col; $(target).dispatchEvent(new Event('input')); });
+        box.appendChild(b);
+      });
+    });
+    var GR = [['#fff1c2','#ffb02e','Золото'],['#ffd9b0','#ff5d73','Закат'],['#c9f4ff','#3d7bff','Океан'],['#dcffee','#2fc9a0','Мята'],['#f1e0ff','#9b6bff','Сирень'],['#ffffff','#9fb6d4','Лёд']];
+    GR.forEach(function(g){
+      var b = document.createElement('button'); b.type = 'button'; b.title = g[2];
+      b.style.background = 'linear-gradient(180deg,' + g[0] + ',' + g[1] + ')';
+      b.addEventListener('click', function(){
+        $('grad').checked = true; $('grad').dispatchEvent(new Event('change'));
+        $('c').value = g[0]; $('c').dispatchEvent(new Event('input'));
+        $('c2').value = g[1]; $('c2').dispatchEvent(new Event('input'));
+      });
+      $('grads').appendChild(b);
+    });
+    document.querySelectorAll('[data-bg]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var col = b.getAttribute('data-bg');
+        var st = $('stage');
+        if (col) { st.style.backgroundImage = 'none'; st.style.backgroundColor = col; }
+        else { st.style.backgroundImage = ''; st.style.backgroundColor = ''; }
+        document.querySelectorAll('[data-bg]').forEach(function(x){ x.classList.toggle('on', x === b); });
+      });
+    });
+    document.querySelectorAll('[data-rate]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var r = b.getAttribute('data-rate').split(',');
+        $('rub').value = r[0]; $('tv').value = r[1]; $('tu').value = r[2];
+        ['rub','tv','tu'].forEach(function(id){ $(id).dispatchEvent(new Event(id === 'tu' ? 'change' : 'input')); });
+      });
+    });
+    $('tdon_b').addEventListener('click', function(){
+      var v = Number($('tdon').value); if (!v || v < 0) return;
+      onDonation({ id: 'test' + Date.now(), username: 'Тест', amount_main: v, test: true });
+    });
+    $('setbtn').addEventListener('click', function(){
+      var n = function(id){ return Math.max(0, Number($(id).value) || 0); };
+      setTime(n('set_h') * 3600 + n('set_m') * 60 + n('set_s'));
+    });
+    $('copy').addEventListener('click', function(){
+      var inp = $('link'); inp.select();
+      var ok = false;
+      try { if (navigator.clipboard) { navigator.clipboard.writeText(inp.value); ok = true; } } catch(e){}
+      if (!ok) try { ok = document.execCommand('copy'); } catch(e){}
+      $('copy').textContent = 'Скопировано'; setTimeout(function(){ $('copy').textContent = 'Копировать'; }, 1500);
+    });
+  }
+
+  /* ---------- общие обработчики ---------- */
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.getAttribute('data-act') === 'toggle') toggle();
+    else if (b.getAttribute('data-act') === 'reset') reset();
+    else if (b.hasAttribute('data-add')) add(Number(b.getAttribute('data-add')));
+  });
+  document.addEventListener('keydown', function(e){
+    var tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.key === '+' || e.key === '=') add(60);
+    else if (e.key === '-') add(-60);
+  });
+  window.addEventListener('storage', function(e){
+    if (!cloud && e.key === SKEY) { var s = load(); if (s) { state = s; render(); } }
+  });
+
+  /* ---------- DonationAlerts ---------- */
+  var sock = null, ct = null, dalog = [];
+  function setStatus(t, ok){
+    var el = $('dastat'); if (!el) return;
+    el.textContent = t; el.style.color = ok === true ? '#7be07b' : (ok === false ? '#ff9a9a' : '');
+    obsNote('da', ok === false ? 'Донаты: ' + t : (t.indexOf('Токен не указан') === 0 ? 'Донаты: нет токена' : ''));
+  }
+  function human(sec){
+    if (sec >= 3600) return +(sec / 3600).toFixed(2) + ' ч';
+    if (sec >= 60) return +(sec / 60).toFixed(2) + ' мин';
+    return +sec.toFixed(2) + ' сек';
+  }
+  function perRub(){ return (cfg.tv * Number(cfg.tu)) / Math.max(cfg.rub, 0.01); }
+  function updateHint(){
+    var el = $('dahint'); if (!el) return;
+    el.textContent = 'Сейчас: ' + cfg.rub + ' ₽ = ' + human(cfg.tv * Number(cfg.tu)) + '. Донат 500 ₽ добавит ' + human(perRub() * 500) + '.';
+  }
+  function seenId(id){
+    try {
+      var a = JSON.parse(localStorage.getItem('donatofon_seen') || '[]');
+      if (a.indexOf(id) >= 0) return true;
+      a.push(id); if (a.length > 80) a = a.slice(-80);
+      localStorage.setItem('donatofon_seen', JSON.stringify(a));
+    } catch(e){}
+    return false;
+  }
+  function renderLog(){
+    var box = $('dalog'); if (!box) return;
+    box.innerHTML = '';
+    dalog.slice(-5).reverse().forEach(function(r){
+      var div = document.createElement('div');
+      div.textContent = r.name + ' — ' + r.rub + ' ₽ → +' + human(r.sec);
+      box.appendChild(div);
+    });
+  }
+  function onDonation(msg){
+    var d = msg;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch(e){ return; } }
+    if (!d || typeof d !== 'object') return;
+    var id = d.id != null ? String(d.id) : '';
+    if (id && seenId(id)) return;
+    var rub = Number(d.amount_main != null ? d.amount_main : d.amount);
+    if (!rub || rub <= 0) return;
+    var sec = rub * perRub();
+    if (sec <= 0) return;
+    addLocal(sec);
+    if (cloud) cloudOp('donatofon_donation', { p_did: id || ('x' + (d.username || '') + rub + Math.floor(Date.now() / 5000)), p_delta_ms: Math.round(sec * 1000) });
+    dalog.push({ name: String(d.username || 'Аноним'), rub: rub, sec: sec });
+    renderLog();
+  }
+  function connectDA(){
+    if (sock) { try { sock.disconnect(); } catch(e){} sock = null; }
+    var tk = String(cfg.tk || '').trim();
+    if (!tk) { setStatus('Токен не указан: донаты не подключены.'); return; }
+    if (typeof io !== 'function') { setStatus('Не загрузилась библиотека socket.io. Нужен интернет.', false); return; }
+    setStatus('Подключаюсь…');
+    sock = io('https://socket.donationalerts.com:443', { reconnection: true });
+    sock.on('connect', function(){
+      sock.emit('add-user', { token: tk, type: 'alert_widget' });
+      setStatus('Соединение есть. Токен проверится на первом донате: нажми «Тест» в DonationAlerts.', true);
+    });
+    sock.on('connect_error', function(){ setStatus('Нет связи с DonationAlerts, пробую снова…', false); });
+    sock.on('disconnect', function(){ setStatus('Связь потеряна, переподключаюсь…', false); });
+    sock.on('donation', onDonation);
+  }
+
+  initState();
+  if (!OBS) bind();
+  connectDA(); updateHint();
+  function startCloud(){
+    setCloudVars();
+    if (poll) { clearInterval(poll); poll = null; }
+    cloudStatus();
+    if (!cloud) { obsNote('cloud', 'Облако: нет ключа'); synced = true; render(); return; }
+    rpc('donatofon_get');
+    poll = setInterval(function(){ if (!busy) rpc('donatofon_get'); }, 2000); /* OBS сам подтягивает изменения с сайта */
+    setTimeout(function(){ if (!synced) { synced = true; render(); } }, 4000);
+  }
+  startCloud();
+  if (!OBS) refreshLink();
+  applyStyle();
+  function remeasure(){ measure(); lastStr = ''; render(); }
+  if (document.fonts){
+    document.fonts.addEventListener('loadingdone', remeasure);
+    document.fonts.load(cfg.wt + ' 100px "' + cfg.f + '"', '0123456789:').then(remeasure);
+    document.fonts.ready.then(remeasure);
+    var fsel = $('f');
+    if (fsel) fsel.addEventListener('change', function(){ document.fonts.load(cfg.wt + ' 100px "' + cfg.f + '"', '0123456789:').then(remeasure); });
+    var wsel = $('wt');
+    if (wsel) wsel.addEventListener('change', function(){ document.fonts.load(cfg.wt + ' 100px "' + cfg.f + '"', '0123456789:').then(remeasure); });
+  }
+  setInterval(render, 250);
+})();
+</script>
+</body>
+</html>
